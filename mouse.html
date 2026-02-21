@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐭 超级肥鼠 - Fat Mouse Whack</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=ZCOOL+KuaiLe&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #fbbf24;
+            --secondary: #f43f5e;
+            --accent: #ff4d4d;
+            --bg: #450a0a;
+            /* 变为深红色背景 */
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: none;
+        }
+
+        body {
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(255, 0, 0, 0.2) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(139, 0, 0, 0.3) 0%, transparent 40%);
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #hammer {
+            position: fixed;
+            width: 70px;
+            height: 70px;
+            font-size: 50px;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            transition: transform 0.05s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            filter: drop-shadow(0 0 10px rgba(255, 0, 0, 0.5));
+        }
+
+        #hammer.hitting {
+            transform: translate(-50%, -50%) rotate(-60deg) scale(1.3);
+        }
+
+        .game-container {
+            width: 90vw;
+            max-width: 600px;
+            background: rgba(80, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 32px;
+            padding: 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            text-align: center;
+            position: relative;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px 20px;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: #fca5a5;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        h1 {
+            font-family: 'ZCOOL KuaiLe', cursive;
+            font-size: 2.8rem;
+            background: linear-gradient(135deg, #ff4d4d 0%, #b91c1c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 10px;
+        }
+
+        .hole {
+            aspect-ratio: 1 / 1;
+            background: #1a0505;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 10px 30px rgba(0, 0, 0, 0.8);
+            border: 3px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mouse {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 5rem;
+            /* 更大一点 */
+            transition: top 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+            user-select: none;
+            transform: scaleX(1.3);
+            /* 变胖！ */
+        }
+
+        .mouse.up {
+            top: 0%;
+        }
+
+        .mouse.hit {
+            animation: hit-shake 0.3s forwards;
+            pointer-events: none;
+        }
+
+        @keyframes hit-shake {
+            0% {
+                transform: scaleX(1.3) scaleY(1);
+            }
+
+            50% {
+                transform: scaleX(1.6) scaleY(0.6) rotate(10deg);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scaleX(0) scaleY(0);
+                opacity: 0;
+            }
+        }
+
+        .floating-score {
+            position: absolute;
+            color: white;
+            font-weight: 900;
+            font-size: 1.5rem;
+            pointer-events: none;
+            text-shadow: 0 0 10px #ff0000;
+            animation: float-up 0.8s forwards;
+            z-index: 100;
+        }
+
+        @keyframes float-up {
+            0% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-80px) scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        #menu,
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(69, 10, 10, 0.95);
+            border-radius: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+            padding: 40px;
+        }
+
+        #game-over {
+            display: none;
+        }
+
+        .btn {
+            background: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            border-radius: 100px;
+            font-size: 1.4rem;
+            font-weight: 800;
+            cursor: inherit;
+            transition: all 0.2s;
+            box-shadow: 0 10px 25px -5px rgba(255, 77, 77, 0.5);
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            background: #ef4444;
+        }
+
+        .combo-badge {
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            background: #fde047;
+            color: #991b1b;
+            padding: 8px 15px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            transform: rotate(15deg);
+            box-shadow: 0 5px 15px rgba(253, 224, 71, 0.4);
+            display: none;
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="hammer">🔨</div>
+
+    <div class="game-container">
+        <div class="header">
+            <div class="stat-box">
+                <div class="stat-label">Time</div>
+                <div class="stat-value" id="time">30</div>
+            </div>
+            <h1>爆裂肥鼠</h1>
+            <div class="stat-box">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div id="combo" class="combo-badge">Combo 0</div>
+        </div>
+
+        <div class="grid">
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+            <div class="hole">
+                <div class="mouse">🐭</div>
+            </div>
+        </div>
+
+        <div id="menu">
+            <h1>横扫千军！</h1>
+            <p style="color: #fca5a5; margin-bottom: 20px;">现在的锤子可以一次敲掉一整行！</p>
+            <button class="btn" id="start-btn">开启屠鼠模式</button>
+        </div>
+
+        <div id="game-over">
+            <h1 style="color: #fde047;">战果结算</h1>
+            <p style="font-size: 1.2rem; margin-bottom: 10px;">最终总分：</p>
+            <div class="stat-value" id="final-score" style="font-size: 4rem; margin-bottom: 20px; color: #fff;">0</div>
+            <button class="btn" id="restart-btn">突破纪录</button>
+        </div>
+    </div>
+
+    <script>
+        const hammer = document.getElementById('hammer');
+        const holes = document.querySelectorAll('.hole');
+        const mice = document.querySelectorAll('.mouse');
+        const scoreDisplay = document.getElementById('score');
+        const timeDisplay = document.getElementById('time');
+        const comboDisplay = document.getElementById('combo');
+
+        let score = 0;
+        let timeLimit = 30;
+        let timeLeft = timeLimit;
+        let gameActive = false;
+        let lastHole;
+        let combo = 0;
+        let gameTimer;
+        let lastHitTime = 0;
+
+        document.addEventListener('mousemove', e => {
+            hammer.style.left = e.clientX + 'px';
+            hammer.style.top = e.clientY + 'px';
+        });
+
+        document.addEventListener('mousedown', () => hammer.classList.add('hitting'));
+        document.addEventListener('mouseup', () => hammer.classList.remove('hitting'));
+
+        function randomTime(min, max) {
+            return Math.round(Math.random() * (max - min) + min);
+        }
+
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) return randomHole(holes);
+            lastHole = hole;
+            return hole;
+        }
+
+        function peep() {
+            if (!gameActive) return;
+            const hole = randomHole(holes);
+            const mouse = hole.querySelector('.mouse');
+            const isGolden = Math.random() > 0.85;
+            mouse.textContent = isGolden ? '🐹' : '🐭';
+            mouse.dataset.type = isGolden ? 'golden' : 'normal';
+            mouse.classList.remove('hit');
+            mouse.classList.add('up');
+
+            const time = Math.max(randomTime(600, 1000) - (score / 15), 350);
+            setTimeout(() => {
+                mouse.classList.remove('up');
+                if (gameActive) peep();
+            }, time);
+        }
+
+        function startGame() {
+            score = 0; timeLeft = timeLimit; combo = 0; gameActive = true;
+            scoreDisplay.textContent = 0;
+            timeDisplay.textContent = timeLeft;
+            comboDisplay.style.display = 'none';
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('game-over').style.display = 'none';
+            peep();
+            peep(); // 增加并发数量，让游戏更紧凑
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                timeDisplay.textContent = timeLeft;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameTimer);
+            document.getElementById('game-over').style.display = 'flex';
+            document.getElementById('final-score').textContent = score;
+        }
+
+        function whack(e) {
+            if (!e.isTrusted || !gameActive) return;
+
+            const clickedMouse = e.currentTarget;
+            const mouseIndex = Array.from(mice).indexOf(clickedMouse);
+            const rowIndex = Math.floor(mouseIndex / 3);
+            const rowStart = rowIndex * 3;
+
+            let hitCount = 0;
+            let rowPoints = 0;
+
+            // 敲击一整行
+            for (let i = rowStart; i < rowStart + 3; i++) {
+                const targetMouse = mice[i];
+                if (targetMouse.classList.contains('up') && !targetMouse.classList.contains('hit')) {
+                    const isGolden = targetMouse.dataset.type === 'golden';
+                    const points = isGolden ? 50 : 10;
+                    rowPoints += points;
+
+                    targetMouse.classList.add('hit');
+                    targetMouse.classList.remove('up');
+                    hitCount++;
+                }
+            }
+
+            if (hitCount > 0) {
+                const now = Date.now();
+                if (now - lastHitTime < 1000) combo++;
+                else combo = 1;
+                lastHitTime = now;
+
+                score += rowPoints + (combo > 1 ? combo * 5 : 0);
+                scoreDisplay.textContent = score;
+
+                if (combo > 1) {
+                    comboDisplay.textContent = `ROW COMBO x${combo}!`;
+                    comboDisplay.style.display = 'block';
+                }
+
+                createFloatingText(`ROW CLEAR +${rowPoints}`, e.clientX, e.clientY);
+            }
+        }
+
+        function createFloatingText(text, x, y) {
+            const el = document.createElement('div');
+            el.className = 'floating-score';
+            el.textContent = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        mice.forEach(mouse => mouse.addEventListener('click', whack));
+        document.getElementById('start-btn').onclick = startGame;
+        document.getElementById('restart-btn').onclick = startGame;
+
+    </script>
+</body>
+
+</html>

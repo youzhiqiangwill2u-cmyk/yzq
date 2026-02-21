@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ 彩晶战机 - Neon crystals Strike</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-purple: #bc13fe;
+            --crystal-glow: rgba(0, 243, 255, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #050505;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 450px;
+            height: 700px;
+            background: linear-gradient(180deg, #0a0a1a 0%, #050505 100%);
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 20px var(--crystal-glow);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        #score-val {
+            color: var(--neon-blue);
+        }
+
+        #lives-val {
+            color: var(--neon-pink);
+        }
+
+        #start-screen,
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 40px;
+            border: 1px solid var(--neon-purple);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            z-index: 10;
+            width: 80%;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            margin-bottom: 20px;
+            background: linear-gradient(to bottom, #fff, var(--neon-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px var(--neon-blue));
+        }
+
+        .btn {
+            background: transparent;
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 12px 30px;
+            font-size: 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 30px var(--neon-blue);
+        }
+
+        #game-over {
+            display: none;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer">
+            <div class="stats">
+                <div>SCORE: <span id="score-val">0</span></div>
+                <div>HP: <span id="lives-val">100%</span></div>
+            </div>
+        </div>
+
+        <div id="start-screen">
+            <h1>彩晶战机</h1>
+            <p>NEON CRYSTAL STRIKE</p>
+            <button class="btn" id="start-btn">开始战斗</button>
+            <div class="instructions">
+                使用鼠标或触摸左右移动控制战机<br>
+                拾取结晶体可以获得高分
+            </div>
+        </div>
+
+        <div id="game-over">
+            <h1>核心受损</h1>
+            <p>最终得分: <span id="final-score">0</span></p>
+            <button class="btn" id="restart-btn">重新修复</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+
+        // 设置画布尺寸
+        canvas.width = 450;
+        canvas.height = 700;
+
+        // 游戏状态
+        let score = 0;
+        let health = 100;
+        let isGameRunning = false;
+        let frameCount = 0;
+
+        // 游戏对象
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 80,
+            width: 50,
+            height: 60,
+            targetX: canvas.width / 2,
+            crystals: 0
+        };
+
+        const bullets = [];
+        const enemies = [];
+        const particles = [];
+        const crystals = [];
+
+        // 颜色配置
+        const colors = {
+            player: '#00f3ff',
+            bullet: '#ff00ff',
+            enemy: '#bc13fe',
+            crystal: '#00ffaa'
+        };
+
+        // 事件监听
+        container.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = e.clientX - rect.left;
+        });
+
+        container.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = e.touches[0].clientX - rect.left;
+        }, { passive: false });
+
+        document.getElementById('start-btn').onclick = startGame;
+        document.getElementById('restart-btn').onclick = startGame;
+
+        function startGame() {
+            score = 0;
+            health = 100;
+            bullets.length = 0;
+            enemies.length = 0;
+            particles.length = 0;
+            crystals.length = 0;
+            isGameRunning = true;
+
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('score-val').textContent = '0';
+            document.getElementById('lives-val').textContent = '100%';
+
+            gameLoop();
+        }
+
+        function createParticle(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    life: 1.0,
+                    size: Math.random() * 3,
+                    color
+                });
+            }
+        }
+
+        function spawnEnemy() {
+            if (frameCount % 40 === 0) {
+                enemies.push({
+                    x: Math.random() * (canvas.width - 40) + 20,
+                    y: -50,
+                    width: 35,
+                    height: 35,
+                    speed: 2 + Math.random() * 2,
+                    hp: 1 + Math.floor(score / 500)
+                });
+            }
+        }
+
+        function gameLoop() {
+            if (!isGameRunning) return;
+
+            ctx.fillStyle = 'rgba(5, 5, 10, 0.2)'; // 拖尾效果
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            frameCount++;
+
+            // 1. 更新玩家位置
+            player.x += (player.targetX - player.x) * 0.15;
+            // 限制范围
+            player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+
+            // 2. 绘制玩家 (彩晶风格)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = varColor('--neon-blue');
+            ctx.fillStyle = '#fff';
+
+            // 战机主体三角形
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y - 25);
+            ctx.lineTo(player.x - 20, player.y + 15);
+            ctx.lineTo(player.x + 20, player.y + 15);
+            ctx.closePath();
+            ctx.fill();
+
+            // 两翼
+            ctx.fillStyle = colors.player;
+            ctx.fillRect(player.x - 25, player.y + 5, 10, 15);
+            ctx.fillRect(player.x + 15, player.y + 5, 10, 15);
+            ctx.shadowBlur = 0;
+
+            // 3. 自动射击
+            if (frameCount % 10 === 0) {
+                bullets.push({ x: player.x, y: player.y - 30, speed: 10 });
+            }
+
+            // 4. 更新子弹
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.y -= b.speed;
+
+                ctx.fillStyle = colors.bullet;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = colors.bullet;
+                ctx.fillRect(b.x - 2, b.y, 4, 15);
+                ctx.shadowBlur = 0;
+
+                if (b.y < -20) bullets.splice(i, 1);
+            }
+
+            // 5. 更新敌人
+            spawnEnemy();
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                e.y += e.speed;
+
+                // 绘制敌机 (菱形结晶)
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.rotate(frameCount * 0.05);
+                ctx.strokeStyle = colors.enemy;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-15, -15, 30, 30);
+                ctx.fillStyle = 'rgba(188, 19, 254, 0.3)';
+                ctx.fillRect(-10, -10, 20, 20);
+                ctx.restore();
+
+                // 碰撞检测 - 子弹
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const b = bullets[j];
+                    if (Math.abs(b.x - e.x) < 20 && Math.abs(b.y - e.y) < 20) {
+                        e.hp--;
+                        bullets.splice(j, 1);
+                        if (e.hp <= 0) {
+                            createParticle(e.x, e.y, colors.enemy);
+                            score += 10;
+                            // 概率掉落水晶
+                            if (Math.random() > 0.7) {
+                                crystals.push({ x: e.x, y: e.y, speed: 2 });
+                            }
+                            enemies.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+
+                // 碰撞检测 - 玩家
+                if (Math.abs(player.x - e.x) < 30 && Math.abs(player.y - e.y) < 30) {
+                    health -= 20;
+                    createParticle(e.x, e.y, colors.enemy);
+                    enemies.splice(i, 1);
+                    if (health <= 0) endGame();
+                }
+
+                if (e.y > canvas.height + 50) enemies.splice(i, 1);
+            }
+
+            // 6. 更新水晶
+            for (let i = crystals.length - 1; i >= 0; i--) {
+                const c = crystals[i];
+                c.y += c.speed;
+
+                ctx.fillStyle = colors.crystal;
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (Math.abs(player.x - c.x) < 30 && Math.abs(player.y - c.y) < 30) {
+                    score += 50;
+                    crystals.splice(i, 1);
+                }
+
+                if (c.y > canvas.height) crystals.splice(i, 1);
+            }
+
+            // 7. 更新粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+
+            // 更新 UI
+            document.getElementById('score-val').textContent = score;
+            document.getElementById('lives-val').textContent = health + '%';
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            isGameRunning = false;
+            document.getElementById('game-over').style.display = 'block';
+            document.getElementById('final-score').textContent = score;
+        }
+
+        function varColor(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        }
+
+    </script>
+</body>
+
+</html>
