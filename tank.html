@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛩️ 空地大决战 - Strike Force</title>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Outfit:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --army-green: #3d4a3d;
+            --desert-sand: #c2b280;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --ui-bg: rgba(15, 23, 42, 0.8);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-view {
+            position: relative;
+            width: 480px;
+            height: 750px;
+            background: #2e3b23;
+            /* 战地颜色 */
+            border: 8px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* 战地 UI 元素 */
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .hud-item {
+            background: var(--ui-bg);
+            color: #fff;
+            padding: 10px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            font-family: 'Black Ops One', cursive;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: #fff;
+            text-align: center;
+        }
+
+        .modal h1 {
+            font-family: 'Black Ops One', cursive;
+            font-size: 3.5rem;
+            color: var(--warning);
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+        }
+
+        .btn {
+            background: var(--warning);
+            color: #000;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-family: 'Black Ops One', cursive;
+            cursor: pointer;
+            transition: 0.2s;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+        }
+
+        .btn:hover {
+            transform: scale(1.1);
+            background: #fff;
+        }
+
+        /* 准星 */
+        #crosshair {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--warning);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 5;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: var(--warning);
+        }
+
+        #crosshair::before {
+            width: 100%;
+            height: 2px;
+            top: 19px;
+            left: 0;
+        }
+
+        #crosshair::after {
+            height: 100%;
+            width: 2px;
+            left: 19px;
+            top: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-view">
+        <canvas id="gameCanvas"></canvas>
+        <div id="crosshair"></div>
+
+        <div class="hud">
+            <div class="hud-item">KILLS: <span id="kills">0</span></div>
+            <div class="hud-item">HP: <span id="hp">100</span>%</div>
+        </div>
+
+        <div id="start-screen" class="modal">
+            <h1>STRIKE FORCE</h1>
+            <p style="margin-bottom: 30px; color: #aaa;">驾驶 A-10 狂暴俯冲，摧毁地面坦克集群！</p>
+            <button class="btn" onclick="startGame()">开始战斗</button>
+        </div>
+
+        <div id="game-over-screen" class="modal" style="display: none;">
+            <h1 style="color: var(--danger);">MISSION FAILED</h1>
+            <p id="result-text" style="margin-bottom: 30px;"></p>
+            <button class="btn" onclick="startGame()">重新部署</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const crosshair = document.getElementById('crosshair');
+        const killsEl = document.getElementById('kills');
+        const hpEl = document.getElementById('hp');
+
+        canvas.width = 480;
+        canvas.height = 750;
+
+        let gameRunning = false;
+        let kills = 0;
+        let hp = 100;
+
+        const plane = {
+            x: 240,
+            y: 650,
+            width: 60,
+            height: 80,
+            speed: 8,
+            targetX: 240
+        };
+
+        const bullets = [];
+        const tanks = [];
+        const particles = [];
+
+        // 图片/素材 绘制函数
+        function drawPlane(x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            // 机身
+            ctx.fillStyle = '#4b5563';
+            ctx.beginPath();
+            ctx.moveTo(0, -40);
+            ctx.lineTo(15, 0);
+            ctx.lineTo(5, 40);
+            ctx.lineTo(-5, 40);
+            ctx.lineTo(-15, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // 机翼
+            ctx.fillStyle = '#374151';
+            ctx.fillRect(-45, -5, 90, 15);
+            ctx.fillRect(-20, 25, 40, 10); // 尾翼
+
+            // 驾驶舱
+            ctx.fillStyle = '#93c5fd';
+            ctx.beginPath();
+            ctx.ellipse(0, -20, 6, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawTank(x, y, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            // 坦克主体 (迷彩风格)
+            ctx.fillStyle = '#14532d';
+            ctx.fillRect(-20, -25, 40, 50);
+
+            ctx.fillStyle = '#166534';
+            ctx.fillRect(-22, -25, 8, 50); // 左履带
+            ctx.fillRect(14, -25, 8, 50);  // 右履带
+
+            // 炮塔
+            ctx.fillStyle = '#064e3b';
+            ctx.beginPath();
+            ctx.rect(-12, -12, 24, 24);
+            ctx.fill();
+
+            // 炮管
+            ctx.fillStyle = '#022c22';
+            ctx.fillRect(-3, -35, 6, 25);
+
+            ctx.restore();
+        }
+
+        function createExplosion(x, y, color = '#f59e0b') {
+            for (let i = 0; i < 15; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color,
+                    size: Math.random() * 5 + 2
+                });
+            }
+        }
+
+        // 交互
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            plane.targetX = e.clientX - rect.left;
+            crosshair.style.left = e.clientX + 'px';
+            crosshair.style.top = e.clientY + 'px';
+        });
+
+        window.addEventListener('mousedown', () => {
+            if (!gameRunning) return;
+            bullets.push({ x: plane.x - 20, y: plane.y - 10, vy: -15 });
+            bullets.push({ x: plane.x + 20, y: plane.y - 10, vy: -15 });
+        });
+
+        function spawnTank() {
+            if (Math.random() < 0.02) {
+                tanks.push({
+                    x: Math.random() * canvas.width,
+                    y: -50,
+                    speed: 2 + Math.random() * 2,
+                    hp: 3
+                });
+            }
+        }
+
+        function startGame() {
+            kills = 0;
+            hp = 100;
+            killsEl.textContent = '0';
+            hpEl.textContent = '100';
+            bullets.length = 0;
+            tanks.length = 0;
+            particles.length = 0;
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'none';
+            crosshair.style.display = 'block';
+            gameRunning = true;
+            requestAnimationFrame(update);
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // 背景：草地网格感
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制简单的地面纹理
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < canvas.width; i += 50) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+            }
+
+            // 飞机平滑移动
+            const dx = plane.targetX - plane.x;
+            plane.x += dx * 0.1;
+            plane.x = Math.max(50, Math.min(canvas.width - 50, plane.x));
+
+            drawPlane(plane.x, plane.y);
+
+            // 处理子弹
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.y += b.vy;
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(b.x - 2, b.y, 4, 15);
+
+                if (b.y < -20) bullets.splice(i, 1);
+            }
+
+            // 处理坦克
+            spawnTank();
+            for (let i = tanks.length - 1; i >= 0; i--) {
+                const t = tanks[i];
+                t.y += t.speed;
+                drawTank(t.x, t.y, Math.PI); // 向下行驶
+
+                // 子弹击中坦克
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const b = bullets[j];
+                    const dist = Math.hypot(b.x - t.x, b.y - t.y);
+                    if (dist < 25) {
+                        t.hp--;
+                        createExplosion(b.x, b.y, '#fff');
+                        bullets.splice(j, 1);
+                        if (t.hp <= 0) {
+                            createExplosion(t.x, t.y, '#ef4444');
+                            tanks.splice(i, 1);
+                            kills++;
+                            killsEl.textContent = kills;
+                            break;
+                        }
+                    }
+                }
+
+                // 坦克撞击飞机
+                if (tanks[i]) {
+                    const distToPlane = Math.hypot(t.x - plane.x, t.y - plane.y);
+                    if (distToPlane < 40) {
+                        hp -= 20;
+                        hpEl.textContent = hp;
+                        createExplosion(t.x, t.y, '#f59e0b');
+                        tanks.splice(i, 1);
+                        if (hp <= 0) endGame();
+                    } else if (t.y > canvas.height + 50) {
+                        tanks.splice(i, 1);
+                        hp -= 10; // 敌人突防也扣分
+                        hpEl.textContent = hp;
+                        if (hp <= 0) endGame();
+                    }
+                }
+            }
+
+            // 处理粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+                else {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        function endGame() {
+            gameRunning = false;
+            crosshair.style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'flex';
+            document.getElementById('result-text').textContent = `指挥官，您在阵亡前摧毁了 ${kills} 辆敌方坦克。`;
+        }
+    </script>
+</body>
+
+</html>
